@@ -10,16 +10,9 @@ Captures meeting transcripts from Fireflies.ai into Design Space. Agents can the
 2. Go to **Integrations** > **Fireflies API**
 3. Copy your API key
 
-### 2. Set Supabase secrets
+### 2. Deploy the webhook
 
-```bash
-supabase secrets set FIREFLIES_API_KEY=your-api-key
-supabase secrets set FIREFLIES_WEBHOOK_SECRET=your-webhook-secret
-```
-
-The webhook secret is a 16-32 character string you choose. You'll enter the same secret in Fireflies.
-
-### 3. Deploy the webhook
+Deploy first, so you have the URL to give Fireflies:
 
 ```bash
 supabase functions deploy webhook-fireflies --project-ref <your-ref> --no-verify-jwt
@@ -30,12 +23,24 @@ Your webhook URL will be:
 https://<your-ref>.supabase.co/functions/v1/webhook-fireflies
 ```
 
-### 4. Configure Fireflies webhook
+### 3. Configure the Fireflies webhook
 
-1. In Fireflies, go to **Developer Settings** > **Webhooks**
-2. Add your webhook URL
-3. Enter the same secret you set in step 2
-4. Select event: **Transcription completed**
+1. In Fireflies, go to **Integrations** > **Webhook** > **Add Config**
+2. Enter your webhook URL (check the project ref: a config pointing at the wrong Supabase project fails silently)
+3. Select event: **Meeting Transcribed**
+4. Click **Continue**. **Fireflies generates the signing secret** and shows it
+5. Copy the signing secret from the Fireflies UI
+
+Do not invent a secret of your own: the webhook verifies every request against the secret Fireflies generated, and a mismatch gives a 401 on every event.
+
+### 4. Set Supabase secrets
+
+```bash
+supabase secrets set FIREFLIES_API_KEY=your-api-key
+supabase secrets set FIREFLIES_WEBHOOK_SECRET=<signing-secret-from-step-3>
+```
+
+Keep both in Bitwarden as well; never in a file in the repo. The signature arrives in the `x-hub-signature` header, as raw hex or `sha256=<hex>`; the function accepts both.
 
 ### 5. Configure project mapping (optional)
 
@@ -71,7 +76,7 @@ DESIGN_SPACE_KEY=<anon-key>
 
 ## How It Works
 
-1. Fireflies sends a webhook when transcription completes
+1. Fireflies sends a webhook when the meeting is transcribed (post-meeting only, no live push)
 2. The edge function fetches the full transcript via GraphQL
 3. Transcript is chunked by speaker blocks (~800 tokens each)
 4. Summary and action items become a separate high-priority chunk
